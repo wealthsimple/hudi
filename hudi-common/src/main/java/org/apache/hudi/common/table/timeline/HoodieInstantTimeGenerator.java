@@ -38,13 +38,7 @@ public class HoodieInstantTimeGenerator {
   // Format of the timestamp used for an Instant
   public static final String SECS_INSTANT_TIMESTAMP_FORMAT = "yyyyMMddHHmmss";
   public static final int SECS_INSTANT_ID_LENGTH = SECS_INSTANT_TIMESTAMP_FORMAT.length();
-  public static final String MILLIS_INSTANT_TIMESTAMP_FORMAT = "yyyyMMddHHmmssSSS";
-  public static final int MILLIS_INSTANT_ID_LENGTH = MILLIS_INSTANT_TIMESTAMP_FORMAT.length();
-  public static final int MILLIS_INSTANT_TIMESTAMP_FORMAT_LENGTH = MILLIS_INSTANT_TIMESTAMP_FORMAT.length();
-  // Formatter to generate Instant timestamps
-  // Unfortunately millisecond format is not parsable as is https://bugs.openjdk.java.net/browse/JDK-8031085. hence have to do appendValue()
-  private static DateTimeFormatter MILLIS_INSTANT_TIME_FORMATTER = new DateTimeFormatterBuilder().appendPattern(SECS_INSTANT_TIMESTAMP_FORMAT)
-      .appendValue(ChronoField.MILLI_OF_SECOND, 3).toFormatter();
+  private static DateTimeFormatter SECS_INSTANT_TIME_FORMATTER = DateTimeFormatter.ofPattern(SECS_INSTANT_TIMESTAMP_FORMAT);
   private static final String MILLIS_GRANULARITY_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
   private static DateTimeFormatter MILLIS_GRANULARITY_DATE_FORMATTER = DateTimeFormatter.ofPattern(MILLIS_GRANULARITY_DATE_FORMAT);
 
@@ -71,10 +65,10 @@ public class HoodieInstantTimeGenerator {
       do {
         if (commitTimeZone.equals(HoodieTimelineTimeZone.UTC)) {
           LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-          newCommitTime = now.format(MILLIS_INSTANT_TIME_FORMATTER);
+          newCommitTime = now.format(SECS_INSTANT_TIME_FORMATTER);
         } else {
           Date d = new Date(System.currentTimeMillis() + milliseconds);
-          newCommitTime = MILLIS_INSTANT_TIME_FORMATTER.format(convertDateToTemporalAccessor(d));
+          newCommitTime = SECS_INSTANT_TIME_FORMATTER.format(convertDateToTemporalAccessor(d));
         }
       } while (HoodieTimeline.compareTimestamps(newCommitTime, HoodieActiveTimeline.LESSER_THAN_OR_EQUALS, oldVal));
       return newCommitTime;
@@ -84,16 +78,13 @@ public class HoodieInstantTimeGenerator {
   public static Date parseDateFromInstantTime(String timestamp) throws ParseException {
     try {
       // Enables backwards compatibility with non-millisecond granularity instants
-      String timestampInMillis = timestamp;
-      if (isSecondGranularity(timestamp)) {
-        // Add milliseconds to the instant in order to parse successfully
-        timestampInMillis = timestamp + DEFAULT_MILLIS_EXT;
-      } else if (timestamp.length() > MILLIS_INSTANT_TIMESTAMP_FORMAT_LENGTH) {
+      String timestampInSecs = timestamp;
+      if (timestamp.length() > SECS_INSTANT_ID_LENGTH) {
         // compaction and cleaning in metadata has special format. handling it by trimming extra chars and treating it with ms granularity
-        timestampInMillis = timestamp.substring(0, MILLIS_INSTANT_TIMESTAMP_FORMAT_LENGTH);
+        timestampInSecs = timestamp.substring(0, SECS_INSTANT_ID_LENGTH);
       }
 
-      LocalDateTime dt = LocalDateTime.parse(timestampInMillis, MILLIS_INSTANT_TIME_FORMATTER);
+      LocalDateTime dt = LocalDateTime.parse(timestampInSecs, SECS_INSTANT_TIME_FORMATTER);
       return Date.from(dt.atZone(ZoneId.systemDefault()).toInstant());
     } catch (DateTimeParseException e) {
       // Special handling for all zero timestamp which is not parsable by DateTimeFormatter
@@ -113,7 +104,7 @@ public class HoodieInstantTimeGenerator {
   }
 
   public static String getInstantFromTemporalAccessor(TemporalAccessor temporalAccessor) {
-    return MILLIS_INSTANT_TIME_FORMATTER.format(temporalAccessor);
+    return SECS_INSTANT_TIME_FORMATTER.format(temporalAccessor);
   }
 
   /**
